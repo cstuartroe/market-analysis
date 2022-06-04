@@ -1,7 +1,7 @@
-from src import PriceSeries
-from src.date_utils import get_quarters
+from src.series import PriceSeries
+from src.utils.date_utils import get_quarters
 from tabulate import tabulate
-from src.display_utils import as_percent
+from src.utils.display_utils import as_percent
 from tqdm import tqdm
 
 if __name__ == "__main__":
