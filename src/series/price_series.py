@@ -24,15 +24,14 @@ class PriceSeries(DateSeries):
 
     def to_changes(self, column=DEFAULT_COLUMN) -> ChangeSeries:
         changes_df = pd.DataFrame()
-        changes_df['Date'] = self.df['Date'].iloc[1:]
-        changes_df['Change'] = (self.df[column]/self.df[column].shift(1)).iloc[1:]
+        changes_df['Change'] = (self.df[column]/self.df[column].shift(1))
+        changes_df.at[(self.symbol, self.first_day()), 'Change'] = 1
 
         return ChangeSeries(changes_df)
 
     def cumulative(self, column=DEFAULT_COLUMN) -> CumulativeGainSeries:
         cumulative_df = pd.DataFrame()
-        cumulative_df['Date'] = self.df['Date'].iloc[1:]
         start_value = self.df[column].iloc[0]
-        cumulative_df['Gain'] = self.df[column].iloc[1:].transform(lambda x: x/start_value)
+        cumulative_df['Gain'] = self.df[column].transform(lambda x: x/start_value)
 
         return CumulativeGainSeries(cumulative_df)

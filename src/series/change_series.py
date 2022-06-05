@@ -11,14 +11,12 @@ class ChangeSeries(DateSeries):
 
     def leverage(self, factor: float) -> "ChangeSeries":
         df = pd.DataFrame()
-        df['Date'] = self.df['Date']
         df['Change'] = self.df['Change'].transform(lambda x: (x-1)*factor + 1)
 
         return ChangeSeries(df)
 
     def cumulative(self) -> CumulativeGainSeries:
         df = pd.DataFrame()
-        df['Date'] = self.df['Date']
         df['Gain'] = self.df['Change'].cumprod()
 
         return CumulativeGainSeries(df)

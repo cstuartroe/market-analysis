@@ -5,6 +5,7 @@ from typing import Optional
 from io import BytesIO
 import pandas as pd
 from dataclasses import dataclass
+from yahooquery import Ticker
 
 
 # Gotta suppress those security protocols somehow!
@@ -67,7 +68,7 @@ def _wsj_request(p: PriceSeriesParams):
     )
 
 
-def _download_historical_data(p: PriceSeriesParams) -> BytesIO:
+def _download_wsj_historical_data_as_csv(p: PriceSeriesParams) -> BytesIO:
     response = _wsj_request(p)
 
     f = BytesIO()
@@ -79,12 +80,35 @@ def _download_historical_data(p: PriceSeriesParams) -> BytesIO:
     return f
 
 
-def download_historical_data_as_pd(p: PriceSeriesParams) -> pd.DataFrame:
-    buf = _download_historical_data(p)
+def _download_wsj_historical_data_as_pd(p: PriceSeriesParams) -> pd.DataFrame:
+    buf = _download_wsj_historical_data_as_csv(p)
 
     df = pd.read_csv(buf, skipinitialspace=True)
     # Reverse the order of rows, so older data is on top
     df = df.loc[::-1].reset_index(drop=True)
     df['Date'] = df['Date'].transform(lambda date_string: datetime.strptime(date_string, '%m/%d/%y').date())
+    df['Symbol'] = p.symbol.upper()
+    df.set_index(['Symbol', 'Date'])
 
     return df
+
+
+def _download_yahoo_historical_data_as_pd(p: PriceSeriesParams) -> pd.DataFrame:
+    t = Ticker(p.symbol)
+    h = t.history(start=p.start_date or DEFAULT_START_DATE, end=p.end_date)
+    h = h.rename(lambda s: s.title(), axis='columns')
+    h.index.names = ['Symbol', 'Date']
+
+    return h
+
+
+class DataSource(Enum):
+    WSJ = "WSJ"
+    YAHOO = "YAHOO"
+
+
+def download_historical_data_as_pd(p: PriceSeriesParams, source: DataSource = DataSource.YAHOO) -> pd.DataFrame:
+    if source == DataSource.YAHOO:
+        return _download_yahoo_historical_data_as_pd(p)
+    elif source == DataSource.WSJ:
+        return _download_wsj_historical_data_as_pd(p)

@@ -1,2 +1,2 @@
-from .price_series import PriceSeriesParams, PriceSeries
+from .price_series import PriceSeries
 from .change_series import ChangeSeries
