@@ -1,61 +1,97 @@
-from src.series import PriceSeries
-from src.utils.date_utils import get_quarters
-from tabulate import tabulate
-from src.utils.display_utils import as_percent
-from tqdm import tqdm
+from src.series import PriceSeries, ChangeSeries
+import matplotlib
+from matplotlib import pyplot as plt
+from src.modeling.linear_correlation import preceding_changes, correlation_p
+from datetime import date
+import numpy as np
+import pandas as pd
+
+matplotlib.use('TkAgg')
+
+
+def set_plt_fullscreen():
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+
+
+def apply_reversion_algo(cs: ChangeSeries):
+    out = pd.DataFrame(index=cs.df.index, columns=['Change'])
+
+    include_row = True
+
+    for i, cols in cs.df.iterrows():
+        out.at[i, 'Change'] = cols[0] if include_row else 1
+        include_row = cols[0] < 1
+
+    return ChangeSeries(out)
+
+
+def annual_reversion(cs: ChangeSeries):
+    for year in range(1994, 2022):
+        year_changes = cs.slice(date(year, 1, 1), date(year + 1, 1, 1)).df['Change']
+        print(
+            year,
+            np.corrcoef(year_changes.iloc[:-1], year_changes.iloc[1:])[0, 1],
+            correlation_p(year_changes.iloc[:-1], year_changes.iloc[1:]),
+        )
+
+
+def reversion_backtesting(cs: ChangeSeries, transform=lambda s: s.cumulative()):
+    set_plt_fullscreen()
+    plt.title(f"{cs.first_day()} to {cs.last_day()}")
+
+    rv = apply_reversion_algo(cs)
+
+    series = [
+        (cs, 'green'),
+        (cs.leverage(2), 'blue'),
+        (cs.leverage(3), 'purple'),
+        (rv, 'yellow'),
+        (rv.leverage(2), 'orange'),
+        (rv.leverage(3), 'red'),
+    ]
+
+    for s, color in series:
+        cumul = transform(s).df
+        plt.plot(cumul.index.get_level_values('Date'), cumul['Gain'], color=color)
+
+    plt.show()
+
+
+def reversion_scatter(cs: ChangeSeries):
+    print(correlation_p(cs.df['Change'].iloc[:-1], cs.df['Change'].iloc[1:]))
+    print(np.corrcoef(cs.df['Change'].iloc[:-1], cs.df['Change'].iloc[1:]))
+    plt.scatter(cs.df['Change'].iloc[:-1], cs.df['Change'].iloc[1:])
+    plt.show()
+
+
+def reversion_by_distance(cs: ChangeSeries):
+    for days in range(1, 90):
+        pc = preceding_changes(cs, days)
+
+        print(days, pc.corr().at['Daily', 'Preceding'], correlation_p(pc['Preceding'], pc['Daily']))
+
+
+def leveraged_spy_vs_upro():
+    ps = PriceSeries.download("SPY")
+    upro = PriceSeries.download("UPRO")
+    ps = ps.slice(upro.first_day())
+
+    cs = ps.to_changes().leverage(3).cumulative()
+    cu = upro.to_changes().cumulative()
+
+    plt.plot(cs.df['Gain'])
+    plt.plot(cu.df['Gain'], color='green')
+
+    plt.show()
+
 
 if __name__ == "__main__":
     ps = PriceSeries.download("SPY")
     cs = ps.to_changes()
-    ls = [cs.leverage(i) for i in range(1, 4)]
-    gs = [l.cumulative() for l in ls]
 
-    rows = [(
-        'Quarter',
-        '1x returns', '1x ATH',
-        '2x returns', '2x ATH',
-        '3x returns', '3x ATH',
-        # '1x 1Q change', '2x 1Q change', '3x 1Q change',
-    )]
+    # reversion_backtesting(cs)
 
-    total_quarters = 0
-    quarters_losing = 0
-    quarters_losing_leveraged = 0
-    quarters_losing_against_unleveraged = 0
-    cumulative_losing_against_spy = 0
-    cumulative_2x_beats_3x = 0
-
-    for qstart, qend, qname in tqdm(list(get_quarters(cs.first_day()))):
-        qgs = [g.slice(ps.first_day(), qend) for g in gs]
-        g1, g2, g3 = [c.slice(qstart, qend).gain() for c in ls]
-        c1, c2, c3 = [float(qg.seek_date(qg.last_day())['Gain']) for qg in qgs]
-        a1, a2, a3 = [qg.max() for qg in qgs]
-
-        rows.append((
-            qname,
-            *[
-                as_percent(x)
-                for x in (c1, a1, c2, a2, c3, a3)
-            ]
-        ))
-
-        total_quarters += 1
-        if g1 < 1:
-            quarters_losing += 1
-        if g3 < 1:
-            quarters_losing_leveraged += 1
-        if g3 < g1:
-            quarters_losing_against_unleveraged += 1
-        if c2 > c3:
-            cumulative_2x_beats_3x += 1
-
-    print(tabulate(rows))
-
-    print(f"There were {total_quarters} quarters.")
-    print(f"There were {quarters_losing} quarters in which SPY lost value.")
-    print(f"There were {quarters_losing_leveraged} quarters in which the leveraged ETF lost value.")
-    print(f"There were {quarters_losing_against_unleveraged} quarters in which the leveraged ETF underperformed SPY.")
-    print(f"2x cumulatively outperformed 3x in {cumulative_2x_beats_3x} quarters.")
-
-    for i in range(1, 4):
-        print(i, as_percent(cs.leverage(i).gain()))
+    for year in range(1993, 2018):
+        print(year)
+        reversion_backtesting(cs.slice(date(year, 1, 1), date(year + 7, 1, 1)), transform=lambda s: s.dca())
