@@ -10,11 +10,10 @@ def preceding_changes(
     cumul = cs.cumulative().df
 
     out = pd.DataFrame()
-    out['Date'] = cs.df['Date'].iloc[days + 1:]
     out['Preceding'] = cumul['Gain'].shift(1)/cumul['Gain'].shift(days + 1)
     out['Daily'] = cs.df['Change']
 
-    return out
+    return out[out['Preceding'].notna()]
 
 
 def correlation_p(list1, list2):

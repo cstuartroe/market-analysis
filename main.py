@@ -5,6 +5,7 @@ from src.modeling.linear_correlation import preceding_changes, correlation_p
 from datetime import date
 import numpy as np
 import pandas as pd
+from tabulate import tabulate
 
 matplotlib.use('TkAgg')
 
@@ -37,39 +38,81 @@ def annual_reversion(cs: ChangeSeries):
 
 
 def reversion_backtesting(cs: ChangeSeries, transform=lambda s: s.cumulative()):
-    set_plt_fullscreen()
     plt.title(f"{cs.first_day()} to {cs.last_day()}")
 
     rv = apply_reversion_algo(cs)
 
     series = [
-        (cs, 'green'),
+        # (cs.leverage(0), 'gray'),
+        # (cs, 'green'),
         (cs.leverage(2), 'blue'),
-        (cs.leverage(3), 'purple'),
-        (rv, 'yellow'),
+        # (cs.leverage(3), 'purple'),
+        # (rv, 'yellow'),
         (rv.leverage(2), 'orange'),
-        (rv.leverage(3), 'red'),
+        # (rv.leverage(3), 'red'),
     ]
 
     for s, color in series:
         cumul = transform(s).df
         plt.plot(cumul.index.get_level_values('Date'), cumul['Gain'], color=color)
 
-    plt.show()
+    # level_line = 2000000
+    # plt.plot((cs.first_day(), cs.last_day()), (level_line, level_line), color='black')
 
 
 def reversion_scatter(cs: ChangeSeries):
     print(correlation_p(cs.df['Change'].iloc[:-1], cs.df['Change'].iloc[1:]))
     print(np.corrcoef(cs.df['Change'].iloc[:-1], cs.df['Change'].iloc[1:]))
     plt.scatter(cs.df['Change'].iloc[:-1], cs.df['Change'].iloc[1:])
-    plt.show()
 
 
 def reversion_by_distance(cs: ChangeSeries):
     for days in range(1, 90):
         pc = preceding_changes(cs, days)
 
-        print(days, pc.corr().at['Daily', 'Preceding'], correlation_p(pc['Preceding'], pc['Daily']))
+        print(
+            days,
+            round(pc.corr().at['Daily', 'Preceding'], 3),
+            correlation_p(pc['Preceding'], pc['Daily']),
+        )
+
+
+def reversion_by_asset(assets: list[str]):
+    rows = [("Asset", "Correlation", "p-value")]
+
+    for asset in assets:
+        ps = PriceSeries.download(asset)
+        cs = ps.to_changes()
+
+        pc = preceding_changes(cs, 1)
+
+        rows.append((
+            asset,
+            round(pc.corr().at['Daily', 'Preceding'], 3),
+            correlation_p(pc['Preceding'], pc['Daily']),
+        ))
+
+    print(tabulate(rows))
+
+
+def rolling_reversion(cs: ChangeSeries):
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+
+    cumul = cs.cumulative()
+    ax1.plot(cumul.df.index.get_level_values("Date"), cumul.df['Gain'], color='black')
+
+    def reversion_correlation(df):
+        pc = preceding_changes(ChangeSeries(df), 1)
+        return pc.corr().at['Daily', 'Preceding']
+
+    rolling_reversions = cs.rolling_stat(reversion_correlation, window=260)
+
+    ax2.plot(
+        rolling_reversions.index.get_level_values('Date'),
+        rolling_reversions['Transformed'],
+        color='red',
+    )
 
 
 def leveraged_spy_vs_upro():
@@ -83,15 +126,42 @@ def leveraged_spy_vs_upro():
     plt.plot(cs.df['Gain'])
     plt.plot(cu.df['Gain'], color='green')
 
-    plt.show()
+
+ASSETS = [
+    "SPY",
+    "UPRO",
+    "GOOG",
+    "AMZN",
+    "TSLA",
+    "AMD",
+    "AAPL",
+    "BABA",
+]
 
 
 if __name__ == "__main__":
+    reversion_by_asset(ASSETS)
+
     ps = PriceSeries.download("SPY")
     cs = ps.to_changes()
+    # cs = cs.slice(date(2019, 1, 1))
 
+    # reversion_by_distance(cs)
+
+    # rolling_reversion(cs)
+    reversion_scatter(cs)
+
+    # t = lambda s: s.dca(250)
     # reversion_backtesting(cs)
+    # reversion_backtesting(cs.random_sample())
+    # plt.hist(cs.df['Change'], bins=[n/1000 for n in range(970, 1030)])
 
-    for year in range(1993, 2018):
-        print(year)
-        reversion_backtesting(cs.slice(date(year, 1, 1), date(year + 7, 1, 1)), transform=lambda s: s.dca())
+    set_plt_fullscreen()
+    plt.show()
+
+    # for year in range(1993, 2017):
+    #     set_plt_fullscreen()
+    #     sliced_changes = cs.slice(date(year, 1, 1))
+    #     reversion_backtesting(sliced_changes, transform=lambda s: s.dca(250))
+    #     plt.show()
+

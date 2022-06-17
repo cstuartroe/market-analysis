@@ -21,13 +21,13 @@ class ChangeSeries(DateSeries):
 
         return CumulativeGainSeries(df)
 
-    def dca(self) -> CumulativeGainSeries:
+    def dca(self, dollars_per_trading_day: int = 1) -> CumulativeGainSeries:
         df = pd.DataFrame(index=self.df.index, columns=['Gain'])
 
         last_value = 1
 
         for i, (change,) in self.df.iterrows():
-            last_value = last_value*change + 1
+            last_value = last_value*change + dollars_per_trading_day
 
             df.at[i, 'Gain'] = last_value
 
