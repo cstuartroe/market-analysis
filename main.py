@@ -1,3 +1,5 @@
+import datetime
+
 from src.series import PriceSeries, ChangeSeries
 import matplotlib
 from matplotlib import pyplot as plt
@@ -127,6 +129,27 @@ def leveraged_spy_vs_upro():
     plt.plot(cu.df['Gain'], color='green')
 
 
+def long_term_reversion(cs: ChangeSeries, lookback: int, lookforward: int, jump: int):
+    fd, ld = cs.first_day(), cs.last_day()
+    day_delta = (ld - fd).days
+
+    changes_before = []
+    changes_after = []
+
+    for i in range(lookback, day_delta - lookforward + 1, jump):
+        midpoint = fd + datetime.timedelta(days=i)
+        start = midpoint - datetime.timedelta(days=lookback)
+        end = midpoint + datetime.timedelta(days=lookforward)
+        cb = cs.slice(start, midpoint).cumulative().total_gain()
+        ca = cs.slice(midpoint, end).cumulative().total_gain()
+        print(start, cb, midpoint, ca, end)
+
+        changes_before.append(cb)
+        changes_after.append(ca)
+
+    plt.scatter(changes_before, changes_after)
+
+
 ASSETS = [
     "SPY",
     "UPRO",
@@ -159,21 +182,10 @@ ASSETS = [
 
 
 if __name__ == "__main__":
-    reversion_by_asset(ASSETS)
-
     ps = PriceSeries.download("SPY")
     cs = ps.to_changes()
-    # cs = cs.slice(date(2019, 1, 1))
 
-    # reversion_by_distance(cs)
-
-    # rolling_reversion(cs)
-    reversion_scatter(cs)
-
-    # t = lambda s: s.dca(250)
-    # reversion_backtesting(cs)
-    # reversion_backtesting(cs.random_sample())
-    # plt.hist(cs.df['Change'], bins=[n/1000 for n in range(970, 1030)])
+    long_term_reversion(cs, 365, 365, 181)
 
     set_plt_fullscreen()
     plt.show()
